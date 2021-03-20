@@ -31,7 +31,7 @@ inline size_t lua_rawlen(lua_State* L, int index) {
 inline void lua_pushglobaltable(lua_State* L) {
   lua_pushvalue(L, LUA_GLOBALSINDEX);
 }
-inline void lua_rawgetp(lua_State* L, int index, void* p) {
+inline void lua_rawgetp(lua_State* L, [[maybe_unused]] int index, void* p) {
   lua_pushlightuserdata(L, p);
   lua_rawget(L, LUA_REGISTRYINDEX);
 }
@@ -76,15 +76,15 @@ inline json::value to_json(lua_State* L, int index, int max_recursive = 1) {
         json::object obj;
 
         int tt = luaL_getmetafield(L, index, "__name");
-        const char* type =
+        const char* type_name =
             (tt == LUA_TSTRING) ? lua_tostring(L, -1) : luaL_typename(L, index);
-        obj[type] = json::value(buffer);
+        obj[type_name] = json::value(buffer);
         if (tt != LUA_TNIL) {
           lua_pop(L, 1); /* remove '__name' */
         }
         return json::value(obj);
       }
-      int array_size = lua_rawlen(L, index);
+      size_t array_size = lua_rawlen(L, index);
       if (array_size > 0) {
         json::array a;
         lua_pushnil(L);
@@ -126,14 +126,14 @@ inline json::value to_json(lua_State* L, int index, int max_recursive = 1) {
     case LUA_TTHREAD:
     case LUA_TFUNCTION: {
       int tt = luaL_getmetafield(L, index, "__name");
-      const char* type =
+      const char* type_name =
           (tt == LUA_TSTRING) ? lua_tostring(L, -1) : luaL_typename(L, index);
       char buffer[128] = {};
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4996)
 #endif
-      sprintf(buffer, "%s: %p", type, lua_topointer(L, index));
+      sprintf(buffer, "%s: %p", type_name, lua_topointer(L, index));
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -158,7 +158,7 @@ inline void push_json(lua_State* L, const json::value& v) {
     lua_pushlstring(L, str.c_str(), str.size());
   } else if (v.is<json::object>()) {
     const json::object& obj = v.get<json::object>();
-    lua_createtable(L, 0, obj.size());
+    lua_createtable(L, 0, static_cast<int>(obj.size()));
     for (json::object::const_iterator itr = obj.begin(); itr != obj.end();
          ++itr) {
       push_json(L, itr->second);
@@ -166,10 +166,10 @@ inline void push_json(lua_State* L, const json::value& v) {
     }
   } else if (v.is<json::array>()) {
     const json::array& array = v.get<json::array>();
-    lua_createtable(L, array.size(), 0);
+    lua_createtable(L, static_cast<int>(array.size()), 0);
     for (size_t index = 0; index < array.size(); ++index) {
       push_json(L, array[index]);
-      lua_rawseti(L, -2, index + 1);
+      lua_rawseti(L, -2, static_cast<int>(index) + 1);
     }
   }
 }
@@ -419,7 +419,7 @@ class debug_info {
     local_vars_type vars = get_local_vars();
     for (size_t index = 0; index < vars.size(); ++index) {
       if (vars[index].first == name) {
-        return set_local_var(index, v);
+        return set_local_var(static_cast<int>(index), v);
       }
     }
     return false;  // local variable name not found
@@ -458,7 +458,7 @@ class debug_info {
     local_vars_type vars = get_upvalues();
     for (size_t index = 0; index < vars.size(); ++index) {
       if (vars[index].first == name) {
-        return set_upvalue(index, v);
+        return set_upvalue(static_cast<int>(index), v);
       }
     }
     return false;  // local variable name not found
@@ -760,7 +760,7 @@ class debugger {
     }
     ret.push_back(stack_info(current_debug_info_.state_, 0));
     while (ret.back().is_available()) {
-      ret.push_back(stack_info(current_debug_info_.state_, ret.size()));
+      ret.push_back(stack_info(current_debug_info_.state_, static_cast<int>(ret.size())));
     }
     ret.pop_back();
     return ret;
